@@ -167,6 +167,7 @@ app.use('/api/groups', require('./middleware/rateLimiter').expenseLimiter, group
 app.use('/api/clients', require('./middleware/rateLimiter').expenseLimiter, clientRoutes);
 app.use('/api/invoices', require('./middleware/rateLimiter').expenseLimiter, invoiceRoutes);
 app.use('/api/payments', require('./middleware/rateLimiter').expenseLimiter, paymentRoutes);
+app.use('/api/forecasting', require('./middleware/rateLimiter').expenseLimiter, require('./routes/forecasting'));
 
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

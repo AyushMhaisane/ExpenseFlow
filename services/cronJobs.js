@@ -99,6 +99,24 @@ class CronJobs {
       await this.updateDailyPortfolioMetrics();
     });
 
+    // Daily forecast generation - Daily at 6 AM
+    cron.schedule('0 6 * * *', async () => {
+      console.log('[CronJobs] Generating daily forecasts...');
+      await this.generateDailyForecasts();
+    });
+
+    // Daily anomaly detection - Daily at 7 AM
+    cron.schedule('0 7 * * *', async () => {
+      console.log('[CronJobs] Running daily anomaly detection...');
+      await this.runDailyAnomalyDetection();
+    });
+
+    // Forecast accuracy update - Daily at 11 PM
+    cron.schedule('0 23 * * *', async () => {
+      console.log('[CronJobs] Updating forecast accuracy...');
+      await this.updateForecastAccuracy();
+    });
+
     console.log('Cron jobs initialized successfully');
   }
 
@@ -382,6 +400,135 @@ class CronJobs {
       console.error('Budget alert error:', error);
     }
   }
-$newMethods}
+
+  static async generateDailyForecasts() {
+    try {
+      const budgetForecastingService = require('./budgetForecastingService');
+      const users = await User.find({});
+
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (const user of users) {
+        try {
+          // Generate monthly forecast for all categories
+          await budgetForecastingService.generateForecast(user._id, {
+            periodType: 'monthly',
+            algorithm: 'moving_average',
+            confidenceLevel: 95
+          });
+
+          // Generate category-specific forecasts for top spending categories
+          const topCategories = await this.getTopSpendingCategories(user._id);
+          for (const category of topCategories.slice(0, 3)) {
+            await budgetForecastingService.generateForecast(user._id, {
+              periodType: 'monthly',
+              category: category,
+              algorithm: 'linear_regression',
+              confidenceLevel: 95
+            });
+          }
+
+          successCount++;
+        } catch (error) {
+          console.error(`[CronJobs] Error generating forecast for user ${user._id}:`, error.message);
+          errorCount++;
+        }
+      }
+
+      console.log(`[CronJobs] Generated forecasts for ${successCount} users, ${errorCount} errors`);
+    } catch (error) {
+      console.error('[CronJobs] Error in daily forecast generation:', error);
+    }
+  }
+
+  static async runDailyAnomalyDetection() {
+    try {
+      const anomalyDetectionService = require('./anomalyDetectionService');
+      const users = await User.find({});
+
+      let totalAnomalies = 0;
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (const user of users) {
+        try {
+          const result = await anomalyDetectionService.detectAnomalies(user._id, {
+            lookbackDays: 30,
+            sensitivityLevel: 'medium'
+          });
+
+          totalAnomalies += result.detected || 0;
+          successCount++;
+        } catch (error) {
+          console.error(`[CronJobs] Error detecting anomalies for user ${user._id}:`, error.message);
+          errorCount++;
+        }
+      }
+
+      console.log(`[CronJobs] Detected ${totalAnomalies} anomalies for ${successCount} users, ${errorCount} errors`);
+    } catch (error) {
+      console.error('[CronJobs] Error in daily anomaly detection:', error);
+    }
+  }
+
+  static async updateForecastAccuracy() {
+    try {
+      const budgetForecastingService = require('./budgetForecastingService');
+      const users = await User.find({});
+
+      let updatedCount = 0;
+      let errorCount = 0;
+
+      for (const user of users) {
+        try {
+          const result = await budgetForecastingService.updateForecastAccuracy(user._id);
+          updatedCount += result.updated_count || 0;
+        } catch (error) {
+          console.error(`[CronJobs] Error updating accuracy for user ${user._id}:`, error.message);
+          errorCount++;
+        }
+      }
+
+      console.log(`[CronJobs] Updated accuracy for ${updatedCount} forecasts, ${errorCount} errors`);
+    } catch (error) {
+      console.error('[CronJobs] Error in forecast accuracy update:', error);
+    }
+  }
+
+  static async getTopSpendingCategories(userId) {
+    try {
+      const threeMonthsAgo = new Date();
+      threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+
+      const categoryData = await Expense.aggregate([
+        {
+          $match: {
+            user: new mongoose.Types.ObjectId(userId),
+            date: { $gte: threeMonthsAgo },
+            type: 'expense'
+          }
+        },
+        {
+          $group: {
+            _id: '$category',
+            total: { $sum: '$amount' }
+          }
+        },
+        {
+          $sort: { total: -1 }
+        },
+        {
+          $limit: 5
+        }
+      ]);
+
+      return categoryData.map(cat => cat._id);
+    } catch (error) {
+      console.error('[CronJobs] Error getting top spending categories:', error);
+      return [];
+    }
+  }
 }
+
 module.exports = CronJobs;
