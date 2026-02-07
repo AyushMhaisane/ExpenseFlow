@@ -159,6 +159,15 @@ class TransactionsManager {
                 this.closeBulkCategorizeModal();
             }
         });
+
+        // Auto-suggestions on description/merchant input
+        const intelligenceInputs = ['transactionDescription', 'transactionMerchant'];
+        intelligenceInputs.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.addEventListener('blur', () => this.fetchPredictions());
+            }
+        });
     }
 
     setDefaultDate() {
@@ -324,6 +333,11 @@ class TransactionsManager {
                 </td>
                 <td>
                     <span class="type-badge ${transaction.type}">${transaction.type}</span>
+                </td>
+                <td>
+                    <div class="tags-container">
+                        ${(transaction.tags || []).map(t => `<span class="tag-pill" style="background: ${t.color || '#64ffda'}20; color: ${t.color || '#64ffda'}; border: 1px solid ${t.color || '#64ffda'}40;">${t.name || 'tag'}</span>`).join('')}
+                    </div>
                 </td>
                 <td>
                     <div class="action-buttons">
@@ -498,29 +512,65 @@ class TransactionsManager {
         };
 
         try {
-            if (this.editingTransaction) {
-                // Update existing transaction
-                const index = this.transactions.findIndex(t => t.id === this.editingTransaction.id);
-                if (index !== -1) {
-                    this.transactions[index] = { ...this.editingTransaction, ...formData };
-                }
-                this.showNotification('Transaction updated successfully!', 'success');
-            } else {
-                // Add new transaction
-                const newTransaction = {
-                    id: `txn_${Date.now()}`,
-                    ...formData,
-                    merchant: 'Manual Entry',
-                    createdAt: new Date().toISOString()
-                };
-                this.transactions.unshift(newTransaction);
-                this.showNotification('Transaction added successfully!', 'success');
-            }
+            const response = await fetch('/api/expenses', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                },
+                body: JSON.stringify(formData)
+            });
 
-            this.applyFilters();
-            this.closeModal();
+            if (response.ok) {
+                this.showNotification('Transaction saved as draft!', 'success');
+                this.loadTransactions();
+                this.closeModal();
+            } else {
+                throw new Error('Failed to save');
+            }
         } catch (error) {
             this.showNotification('Error saving transaction', 'error');
+        }
+    }
+
+    async submitForApproval() {
+        // First save the transaction, then submit
+        const formData = {
+            type: document.getElementById('transactionType').value,
+            amount: parseFloat(document.getElementById('transactionAmount').value),
+            description: document.getElementById('transactionDescription').value,
+            category: document.getElementById('transactionCategory').value,
+            date: document.getElementById('transactionDate').value,
+            notes: document.getElementById('transactionNotes').value,
+            approvalStatus: 'pending'
+        };
+
+        try {
+            const saveRes = await fetch('/api/expenses', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                },
+                body: JSON.stringify(formData)
+            });
+
+            const data = await saveRes.json();
+            if (data.success) {
+                // Now trigger approval submission
+                const submitRes = await fetch(`/api/approvals/submit/${data.data._id}`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                });
+
+                if (submitRes.ok) {
+                    this.showNotification('Transaction submitted for approval!', 'success');
+                    this.loadTransactions();
+                    this.closeModal();
+                }
+            }
+        } catch (error) {
+            this.showNotification('Error during submission', 'error');
         }
     }
 
@@ -693,6 +743,34 @@ class TransactionsManager {
         setTimeout(() => {
             notification.remove();
         }, 3000);
+    }
+
+    async fetchPredictions() {
+        const description = document.getElementById('transactionDescription').value;
+        const merchant = document.getElementById('transactionMerchant').value;
+
+        if (!description && !merchant) return;
+
+        try {
+            const res = await fetch('/api/tags/predict', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                },
+                body: JSON.stringify({ description, merchant })
+            });
+            const data = await res.json();
+            if (data.success && data.data.confidence > 0.5) {
+                const categoryEl = document.getElementById('transactionCategory');
+                if (categoryEl && data.data.category !== 'other') {
+                    categoryEl.value = data.data.category;
+                    this.showNotification(`Intelligent Suggestion: Category set to ${data.data.category}`, 'info');
+                }
+            }
+        } catch (err) {
+            console.error('Prediction error:', err);
+        }
     }
 }
 

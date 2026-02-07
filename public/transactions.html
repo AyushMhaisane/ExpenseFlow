@@ -23,6 +23,7 @@
                 <a href="goals.html" class="nav-link">Goals</a>
                 <a href="analytics.html" class="nav-link">Analytics</a>
                 <a href="budget.html" class="nav-link">Budget</a>
+                <a href="tag-manager.html" class="nav-link">Tags</a>
             </div>
         </div>
     </nav>
@@ -152,6 +153,7 @@
                             <th onclick="sortTable('type')">
                                 Type <i class="fas fa-sort"></i>
                             </th>
+                            <th>Tags</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -269,7 +271,10 @@
                 <div class="form-actions">
                     <button type="button" class="btn-cancel" onclick="closeModal()">Cancel</button>
                     <button type="submit" class="btn-submit">
-                        <i class="fas fa-save"></i> Save Transaction
+                        <i class="fas fa-save"></i> Save Draft
+                    </button>
+                    <button type="button" class="btn-approve" onclick="transactionsManager.submitForApproval()">
+                        <i class="fas fa-paper-plane"></i> Submit for Approval
                     </button>
                 </div>
             </form>
