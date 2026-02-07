@@ -142,6 +142,15 @@ class TransactionsManager {
                 this.closeBulkCategorizeModal();
             }
         });
+
+        // Auto-suggestions on description/merchant input
+        const intelligenceInputs = ['transactionDescription', 'transactionMerchant'];
+        intelligenceInputs.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.addEventListener('blur', () => this.fetchPredictions());
+            }
+        });
     }
 
     setDefaultDate() {
@@ -309,6 +318,11 @@ class TransactionsManager {
                     <span class="type-badge ${transaction.type}">${transaction.type}</span>
                 </td>
                 <td>
+                    <div class="tags-container">
+                        ${(transaction.tags || []).map(t => `<span class="tag-pill" style="background: ${t.color || '#64ffda'}20; color: ${t.color || '#64ffda'}; border: 1px solid ${t.color || '#64ffda'}40;">${t.name || 'tag'}</span>`).join('')}
+                    </div>
+                </td>
+                <td>
                     <div class="action-buttons">
                         <button class="action-btn edit" onclick="transactionsManager.editTransaction('${transaction.id}')">
                             <i class="fas fa-edit"></i>
@@ -473,6 +487,8 @@ class TransactionsManager {
             description: document.getElementById('transactionDescription').value,
             category: document.getElementById('transactionCategory').value,
             date: document.getElementById('transactionDate').value,
+            merchant: document.getElementById('transactionMerchant').value,
+            tags: document.getElementById('transactionTags').value.split(',').map(t => t.trim()).filter(t => t),
             notes: document.getElementById('transactionNotes').value
         };
 
@@ -708,6 +724,34 @@ class TransactionsManager {
         setTimeout(() => {
             notification.remove();
         }, 3000);
+    }
+
+    async fetchPredictions() {
+        const description = document.getElementById('transactionDescription').value;
+        const merchant = document.getElementById('transactionMerchant').value;
+
+        if (!description && !merchant) return;
+
+        try {
+            const res = await fetch('/api/tags/predict', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                },
+                body: JSON.stringify({ description, merchant })
+            });
+            const data = await res.json();
+            if (data.success && data.data.confidence > 0.5) {
+                const categoryEl = document.getElementById('transactionCategory');
+                if (categoryEl && data.data.category !== 'other') {
+                    categoryEl.value = data.data.category;
+                    this.showNotification(`Intelligent Suggestion: Category set to ${data.data.category}`, 'info');
+                }
+            }
+        } catch (err) {
+            console.error('Prediction error:', err);
+        }
     }
 }
 
